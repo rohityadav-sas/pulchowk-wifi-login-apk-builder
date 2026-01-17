@@ -85,15 +85,31 @@ export default function Home() {
         return;
       }
 
+      // Get the run_id from the build response
+      const buildResult = await r.json();
+      const myRunId = buildResult.runId;
+      
+      if (myRunId) {
+        setRunId(myRunId);
+        fetchSteps(myRunId);
+      }
+
       const t = setInterval(async () => {
         try {
-          const s = await fetch("/api/status", { cache: "no-store" }).then((x) =>
+          // Pass run_id to status endpoint to get only our build's status
+          const statusUrl = myRunId 
+            ? `/api/status?run_id=${myRunId}` 
+            : "/api/status";
+          
+          const s = await fetch(statusUrl, { cache: "no-store" }).then((x) =>
             x.json()
           );
           if (s.url) setRunUrl(s.url);
-          if (s.runId) {
+          if (s.runId && !myRunId) {
             setRunId(s.runId);
-            fetchSteps(s.runId);
+          }
+          if (myRunId) {
+            fetchSteps(myRunId);
           }
           setStatus(s.status || "none");
           setConclusion(s.conclusion);
@@ -103,14 +119,19 @@ export default function Home() {
             setBusy(false);
 
             if (s.conclusion === "success") {
-              const a = await fetch("/api/latest-apk", { cache: "no-store" }).then(
+              // Pass run_id to latest-apk endpoint to get only our APK
+              const apkUrl = myRunId 
+                ? `/api/latest-apk?run_id=${myRunId}` 
+                : "/api/latest-apk";
+              
+              const a = await fetch(apkUrl, { cache: "no-store" }).then(
                 (x) => x.json()
               );
               if (a.ok) {
                 setApkUrl(a.url);
                 setApkName(a.name);
               } else {
-                setError("Build success, but APK not found in latest release yet.");
+                setError("Build success, but APK not found in release yet.");
               }
             }
           }
