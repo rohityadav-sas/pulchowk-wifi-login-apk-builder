@@ -249,7 +249,7 @@ export default function Home() {
                       id="username"
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
-                      placeholder="e.g., 079bct070"
+                      placeholder="079bct070"
                       disabled={busy}
                       className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     />
@@ -268,14 +268,13 @@ export default function Home() {
                       </svg>
                     </div>
                     <input
-                      type="password"
+                      type="tel"
                       id="password"
                       ref={passwordRef}
-                      pattern="^[0-9-]+$"
                       onKeyDown={(e)=> {if (e.key==="Enter") build()}}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Your WiFi password"
+                      placeholder="Password"
                       disabled={busy}
                       className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     />
