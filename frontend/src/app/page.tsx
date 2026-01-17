@@ -132,6 +132,12 @@ export default function Home() {
               if (a.ok) {
                 setApkUrl(a.url);
                 setApkName(a.name);
+                // Mark all steps as completed when APK is successfully received
+                setSteps(prevSteps => prevSteps.map(step => ({
+                  ...step,
+                  status: "completed",
+                  conclusion: step.conclusion === "failure" ? "failure" : "success"
+                })));
               } else {
                 setError("Build success, but APK not found in release yet.");
               }
