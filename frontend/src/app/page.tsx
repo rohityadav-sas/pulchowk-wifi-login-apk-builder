@@ -4,6 +4,12 @@ import { useState } from "react";
 
 type StatusState = "idle" | "queued" | "in_progress" | "success" | "failure";
 
+type Step = {
+  name: string;
+  status: string;      // queued | in_progress | completed
+  conclusion: string | null; // success | failure | skipped | null
+};
+
 function getStatusState(status: string, conclusion?: string | null): StatusState {
   if (!status || status === "none") return "idle";
   if (status === "queued") return "queued";
@@ -14,6 +20,17 @@ function getStatusState(status: string, conclusion?: string | null): StatusState
   return "idle";
 }
 
+function getStepIcon(step: Step): string {
+  if (step.status === "completed") {
+    if (step.conclusion === "success") return "✅";
+    if (step.conclusion === "failure") return "❌";
+    if (step.conclusion === "skipped") return "⏭️";
+    return "✅";
+  }
+  if (step.status === "in_progress") return "⏳";
+  return "⬜";
+}
+
 export default function Home() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -21,11 +38,25 @@ export default function Home() {
   const [status, setStatus] = useState("none");
   const [conclusion, setConclusion] = useState<string | null>(null);
   const [runUrl, setRunUrl] = useState("");
+  const [runId, setRunId] = useState<number | null>(null);
   const [apkUrl, setApkUrl] = useState("");
   const [apkName, setApkName] = useState("");
   const [error, setError] = useState("");
+  const [steps, setSteps] = useState<Step[]>([]);
 
   const canBuild = username.trim() !== "" && password.trim() !== "" && !busy;
+
+  async function fetchSteps(id: number) {
+    try {
+      const res = await fetch(`/api/steps?run_id=${id}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setSteps(data.steps || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch steps:", err);
+    }
+  }
 
   async function build() {
     if (!canBuild) return;
@@ -34,9 +65,11 @@ export default function Home() {
     setStatus("queued");
     setConclusion(null);
     setRunUrl("");
+    setRunId(null);
     setApkUrl("");
     setApkName("");
     setError("");
+    setSteps([]);
 
     try {
       const r = await fetch("/api/build", {
@@ -58,6 +91,10 @@ export default function Home() {
             x.json()
           );
           if (s.url) setRunUrl(s.url);
+          if (s.runId) {
+            setRunId(s.runId);
+            fetchSteps(s.runId);
+          }
           setStatus(s.status || "none");
           setConclusion(s.conclusion);
 
@@ -80,7 +117,7 @@ export default function Home() {
         } catch (err) {
           console.error("Polling error:", err);
         }
-      }, 4000);
+      }, 3000);
     } catch {
       setError("Failed to start build. Check your API configuration.");
       setStatus("none");
@@ -95,55 +132,26 @@ export default function Home() {
       label: "Ready to build",
       textClass: "text-[hsl(215,20%,55%)]",
       borderClass: "",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" />
-        </svg>
-      ),
     },
     queued: {
       label: "Queued",
       textClass: "text-[hsl(38,92%,50%)]",
       borderClass: "border-[hsl(38,92%,50%)]/50",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-      ),
     },
     in_progress: {
       label: "Building...",
       textClass: "text-[hsl(173,80%,50%)]",
       borderClass: "border-[hsl(173,80%,50%)]/50 glow-primary",
-      icon: (
-        <svg className="h-5 w-5 animate-spin" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path d="M21 12a9 9 0 11-6.219-8.56" />
-        </svg>
-      ),
     },
     success: {
       label: "Build successful",
       textClass: "text-[hsl(142,76%,45%)]",
       borderClass: "border-[hsl(142,76%,45%)]/50 glow-success",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
-          <polyline points="22 4 12 14.01 9 11.01" />
-        </svg>
-      ),
     },
     failure: {
       label: "Build failed",
       textClass: "text-[hsl(0,72%,51%)]",
       borderClass: "border-[hsl(0,72%,51%)]/50",
-      icon: (
-        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="15" y1="9" x2="9" y2="15" />
-          <line x1="9" y1="9" x2="15" y2="15" />
-        </svg>
-      ),
     },
   };
 
@@ -180,209 +188,241 @@ export default function Home() {
       <main className="flex-1 relative">
         <div className="container mx-auto px-6 py-6">
           {/* Hero Section */}
-          <div className="text-center mb-4 animate-fade-in">
-            <h2 className="text-4xl md:text-5xl font-extrabold mb-4">
+          <div className="text-center mb-6 animate-fade-in">
+            <h2 className="text-3xl md:text-4xl font-extrabold mb-2">
               Build Your <span className="text-gradient">Login APK</span>
             </h2>
+            <p className="text-sm text-[hsl(215,20%,55%)] max-w-lg mx-auto">
+              Enter your Pulchowk Campus WiFi credentials to generate a personalized login app.
+            </p>
           </div>
 
-          {/* Credentials Form */}
-          <div className="max-w-md mx-auto mb-6 animate-fade-in animate-delay-100">
-            <div className="glass rounded-xl p-5 space-y-3">
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium mb-2 text-[hsl(210,40%,98%)]">
-                  Username
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-[hsl(215,20%,55%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    id="username"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="e.g., 079bct070"
-                    disabled={busy}
-                    className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium mb-2 text-[hsl(210,40%,98%)]">
-                  Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <svg className="h-5 w-5 text-[hsl(215,20%,55%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    </svg>
-                  </div>
-                  <input
-                    type="password"
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Your WiFi password"
-                    disabled={busy}
-                    className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  />
-                </div>
-              </div>
-
-              <p className="text-xs text-[hsl(215,20%,55%)] text-center pt-2">
-                Your credentials are only used for APK generation and are not stored.
-              </p>
-            </div>
-          </div>
-
-          {/* Build Button */}
-          <div className="flex justify-center mb-6 animate-fade-in animate-delay-200">
-            <div className="relative">
-              {/* Pulsing ring effect when ready */}
-              {canBuild && (
-                <div className="absolute inset-0 rounded-xl bg-[hsl(173,80%,50%)]/20 animate-pulse-ring" />
-              )}
-              
-              <button
-                onClick={build}
-                disabled={!canBuild}
-                className={`relative z-10 min-w-[200px] px-8 py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all duration-300 ${
-                  !canBuild
-                    ? "bg-[hsl(222,30%,14%)] text-[hsl(215,20%,55%)] cursor-not-allowed"
-                    : "bg-[hsl(173,80%,50%)] text-[hsl(222,47%,6%)] hover:bg-[hsl(173,80%,55%)] shadow-lg shadow-[hsl(173,80%,50%)]/30"
-                }`}
-              >
-                {busy ? (
-                  <>
-                    <svg className="h-5 w-5 animate-spin" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M21 12a9 9 0 11-6.219-8.56" />
-                    </svg>
-                    Building...
-                  </>
-                ) : (
-                  <>
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                    </svg>
-                    Build APK
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* 60 Second Warning */}
-          <div className="flex justify-center mb-4 animate-fade-in animate-delay-200">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[hsl(38,92%,50%)]/10 border border-[hsl(38,92%,50%)]/30">
-              <svg className="h-3.5 w-3.5 text-[hsl(38,92%,50%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="12 6 12 12 16 14" />
-              </svg>
-              <span className="text-xs text-[hsl(38,92%,50%)]">
-                Download link expires in 60 seconds after build
-              </span>
-            </div>
-          </div>
-
-          {/* Status and Download Grid */}
-          <div className="max-w-2xl mx-auto space-y-4">
-            {/* Error Message */}
-            {error && (
-              <div className="glass rounded-xl p-4 border-[hsl(0,72%,51%)]/50 flex items-start gap-3 animate-scale-in">
-                <svg className="h-5 w-5 text-[hsl(0,72%,51%)] shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="8" x2="12" y2="12" />
-                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                <p className="text-sm text-[hsl(0,72%,51%)]">{error}</p>
-              </div>
-            )}
-
-            {/* Status Card */}
-            <div className="animate-fade-in animate-delay-300">
-              <div className={`glass rounded-xl p-4 transition-all duration-300 ${currentStatus.borderClass}`}>
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(222,30%,14%)] ${currentStatus.textClass}`}>
-                    {currentStatus.icon}
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h3 className="font-semibold">Build Status</h3>
-                    <p className={`text-sm ${currentStatus.textClass}`}>{currentStatus.label}</p>
+          {/* Two-column layout: Form left, Progress right on desktop */}
+          <div className="flex flex-col lg:flex-row gap-6 max-w-5xl mx-auto">
+            
+            {/* Left Column: Form */}
+            <div className="flex-1 lg:max-w-md">
+              {/* Credentials Form */}
+              <div className="glass rounded-xl p-5 space-y-3 animate-fade-in animate-delay-100">
+                <div>
+                  <label htmlFor="username" className="block text-sm font-medium mb-2 text-[hsl(210,40%,98%)]">
+                    Username
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-[hsl(215,20%,55%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                    <input
+                      type="text"
+                      id="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      placeholder="e.g., 079bct070"
+                      disabled={busy}
+                      className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
                   </div>
                 </div>
 
-                {runUrl && (
-                  <a
-                    href={runUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-4 inline-flex items-center gap-2 text-sm text-[hsl(173,80%,50%)] hover:text-[hsl(173,80%,60%)] transition-colors font-mono"
+                <div>
+                  <label htmlFor="password" className="block text-sm font-medium mb-2 text-[hsl(210,40%,98%)]">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <svg className="h-5 w-5 text-[hsl(215,20%,55%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                    <input
+                      type="password"
+                      id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Your WiFi password"
+                      disabled={busy}
+                      className="w-full pl-10 pr-4 py-3 rounded-lg bg-[hsl(222,30%,14%)] border border-[hsl(222,30%,18%)] text-[hsl(210,40%,98%)] placeholder-[hsl(215,20%,45%)] focus:outline-none focus:border-[hsl(173,80%,50%)] focus:ring-1 focus:ring-[hsl(173,80%,50%)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                <p className="text-xs text-[hsl(215,20%,55%)] text-center pt-2">
+                  Your credentials are only used for APK generation and are not stored.
+                </p>
+
+                {/* Build Button */}
+                <div className="pt-2">
+                  <button
+                    onClick={build}
+                    disabled={!canBuild}
+                    className={`w-full px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all duration-300 ${
+                      !canBuild
+                        ? "bg-[hsl(222,30%,14%)] text-[hsl(215,20%,55%)] cursor-not-allowed"
+                        : "bg-[hsl(173,80%,50%)] text-[hsl(222,47%,6%)] hover:bg-[hsl(173,80%,55%)] shadow-lg shadow-[hsl(173,80%,50%)]/30"
+                    }`}
                   >
-                    View build logs →
+                    {busy ? (
+                      <>
+                        <svg className="h-5 w-5 animate-spin" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M21 12a9 9 0 11-6.219-8.56" />
+                        </svg>
+                        Building...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                        </svg>
+                        Build APK
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div className="mt-4 glass rounded-xl p-4 border-[hsl(0,72%,51%)]/50 flex items-start gap-3 animate-scale-in">
+                  <svg className="h-5 w-5 text-[hsl(0,72%,51%)] shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  <p className="text-sm text-[hsl(0,72%,51%)]">{error}</p>
+                </div>
+              )}
+
+              {/* Download Card */}
+              {apkUrl && (
+                <div className="mt-4 glass rounded-xl p-5 border-[hsl(142,76%,45%)]/30 glow-success animate-scale-in">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[hsl(142,76%,45%)]/20 text-[hsl(142,76%,45%)]">
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-[hsl(142,76%,45%)]">APK Ready!</h3>
+                      <p className="text-xs text-[hsl(215,20%,55%)] font-mono">{apkName}</p>
+                    </div>
+                  </div>
+
+                  <a
+                    href={apkUrl}
+                    download
+                    className="w-full px-4 py-2.5 rounded-lg font-semibold flex items-center justify-center gap-2 bg-[hsl(142,76%,45%)] text-white hover:bg-[hsl(142,76%,50%)] transition-colors"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Download APK
                   </a>
+
+                  <p className="mt-2 text-xs text-[hsl(38,92%,50%)] text-center">
+                    ⚠️ Link expires in ~60 seconds
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column: Progress Panel */}
+            <div className="flex-1 lg:max-w-md animate-fade-in animate-delay-200">
+              <div className={`glass rounded-xl p-5 transition-all duration-300 ${currentStatus.borderClass}`}>
+                {/* Status Header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full bg-[hsl(222,30%,14%)] ${currentStatus.textClass}`}>
+                      {state === "in_progress" ? (
+                        <svg className="h-4 w-4 animate-spin" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M21 12a9 9 0 11-6.219-8.56" />
+                        </svg>
+                      ) : state === "success" ? (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
+                          <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                      ) : state === "failure" ? (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
+                        </svg>
+                      ) : (
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <circle cx="12" cy="12" r="10" />
+                        </svg>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-sm">Build Progress</h3>
+                      <p className={`text-xs ${currentStatus.textClass}`}>{currentStatus.label}</p>
+                    </div>
+                  </div>
+                  
+                  {runUrl && (
+                    <a
+                      href={runUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-[hsl(173,80%,50%)] hover:text-[hsl(173,80%,60%)] transition-colors"
+                    >
+                      View logs →
+                    </a>
+                  )}
+                </div>
+
+                {/* Progress Steps */}
+                <div className="border-t border-[hsl(222,30%,18%)] pt-4">
+                  {steps.length > 0 ? (
+                    <div className="space-y-2">
+                      {steps.map((step, index) => (
+                        <div key={index} className="flex items-center gap-3 text-sm">
+                          <span className="text-base">{getStepIcon(step)}</span>
+                          <span className={
+                            step.status === "completed" && step.conclusion === "success" 
+                              ? "text-[hsl(215,20%,55%)]"
+                              : step.status === "in_progress"
+                              ? "text-[hsl(173,80%,50%)]"
+                              : step.status === "completed" && step.conclusion === "failure"
+                              ? "text-[hsl(0,72%,51%)]"
+                              : "text-[hsl(215,20%,45%)]"
+                          }>
+                            {step.name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-[hsl(215,20%,45%)]">
+                      <svg className="h-8 w-8 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+                        <path d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
+                      </svg>
+                      <p className="text-sm">Enter credentials and click Build APK</p>
+                      <p className="text-xs mt-1">Build steps will appear here</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 60 Second Warning */}
+                {(state === "in_progress" || state === "queued") && (
+                  <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(38,92%,50%)]/10 border border-[hsl(38,92%,50%)]/30">
+                    <svg className="h-3.5 w-3.5 text-[hsl(38,92%,50%)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span className="text-xs text-[hsl(38,92%,50%)]">
+                      Download link expires 60s after build completes
+                    </span>
+                  </div>
                 )}
               </div>
             </div>
-
-            {/* Download Card */}
-            {apkUrl && (
-              <div className="glass rounded-xl p-6 border-[hsl(142,76%,45%)]/30 glow-success animate-scale-in">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[hsl(142,76%,45%)]/20 text-[hsl(142,76%,45%)]">
-                    <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    </svg>
-                  </div>
-                  
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold">APK Ready</h3>
-                    <p className="text-sm text-[hsl(215,20%,55%)] font-mono mt-1 break-all">
-                      {apkName}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Urgent download warning */}
-                <div className="mt-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(38,92%,50%)]/10 border border-[hsl(38,92%,50%)]/30">
-                  <svg className="h-4 w-4 text-[hsl(38,92%,50%)] shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                  <span className="text-xs text-[hsl(38,92%,50%)]">
-                    Download immediately! This link will expire in 60 seconds.
-                  </span>
-                </div>
-
-                <a
-                  href={apkUrl}
-                  download
-                  className="w-full mt-4 px-6 py-3 rounded-lg font-semibold flex items-center justify-center gap-2 bg-[hsl(142,76%,45%)] text-white hover:bg-[hsl(142,76%,50%)] transition-colors"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                  Download APK Now
-                </a>
-
-                <div className="mt-4 flex items-center gap-2 text-xs text-[hsl(215,20%,55%)]">
-                  <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
-                    <line x1="12" y1="18" x2="12.01" y2="18" />
-                  </svg>
-                  <span>Transfer to your Android device to install</span>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
