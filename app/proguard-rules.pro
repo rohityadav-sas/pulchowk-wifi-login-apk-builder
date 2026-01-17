@@ -1,0 +1,1 @@
+-keep class wifi.login.MainActivity { *; }
