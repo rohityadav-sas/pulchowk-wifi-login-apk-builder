@@ -6,11 +6,15 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [runUrl, setRunUrl] = useState("");
+  const [apkUrl, setApkUrl] = useState("");
+  const [apkName, setApkName] = useState("");
 
   async function build() {
     setBusy(true);
     setMsg("Starting build...");
     setRunUrl("");
+    setApkUrl("");
+    setApkName("");
 
     const r = await fetch("/api/build", { method: "POST" });
     if (!r.ok) {
@@ -28,7 +32,23 @@ export default function Home() {
       if (s.status === "completed") {
         clearInterval(t);
         setBusy(false);
-        setMsg(s.conclusion === "success" ? "Build success!" : "Build failed.");
+
+        if (s.conclusion === "success") {
+          setMsg("Build success!");
+
+          // fetch latest apk url
+          const a = await fetch("/api/latest-apk", { cache: "no-store" }).then(
+            (x) => x.json(),
+          );
+          if (a.ok) {
+            setApkUrl(a.url);
+            setApkName(a.name);
+          } else {
+            setMsg("Build success, but APK not found in latest release yet.");
+          }
+        } else {
+          setMsg("Build failed.");
+        }
       } else {
         setMsg(`Build: ${s.status}...`);
       }
@@ -47,6 +67,14 @@ export default function Home() {
         <p>
           <a href={runUrl} target="_blank" rel="noreferrer">
             Open build logs
+          </a>
+        </p>
+      )}
+
+      {apkUrl && (
+        <p>
+          <a href={apkUrl} download>
+            Download APK{apkName ? ` (${apkName})` : ""}
           </a>
         </p>
       )}
