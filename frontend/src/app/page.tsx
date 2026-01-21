@@ -48,20 +48,22 @@ export default function Home() {
   const [steps, setSteps] = useState<Step[]>([])
   const passwordRef = useRef<HTMLInputElement>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
+  const [finalTime, setFinalTime] = useState<number | null>(null)
 
   // Stopwatch effect
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
     if (busy) {
       setElapsedTime(0)
+      setFinalTime(null)
       interval = setInterval(() => {
         setElapsedTime((prev) => prev + 1)
       }, 1000)
-    } else {
-      setElapsedTime(0)
     }
     return () => {
-      if (interval) clearInterval(interval)
+      if (interval) {
+        clearInterval(interval)
+      }
     }
   }, [busy])
 
@@ -461,6 +463,14 @@ export default function Home() {
                     Download APK
                   </a>
 
+                  <div className='mt-3 flex items-center justify-center gap-2 text-xs text-[hsl(173,80%,50%)]'>
+                    <svg className='h-4 w-4' fill='none' stroke='currentColor' strokeWidth={2} viewBox='0 0 24 24'>
+                      <circle cx='12' cy='12' r='10' />
+                      <polyline points='12 6 12 12 16 14' />
+                    </svg>
+                    <span>Built in {finalTime} seconds</span>
+                  </div>
+
                   <p className='mt-2 text-xs text-[hsl(38,92%,50%)] text-center'>
                     ⚠️ Link expires in ~60 seconds
                   </p>
@@ -612,7 +622,7 @@ export default function Home() {
                         {formatTime(elapsedTime)}
                       </span>
                       <span className='text-xs text-[hsl(215,20%,55%)]'>
-                        Usually takes less than 1 minute
+                        Usually takes around 1 minute
                       </span>
                     </div>
 
