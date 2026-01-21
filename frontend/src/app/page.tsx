@@ -49,6 +49,7 @@ export default function Home() {
   const passwordRef = useRef<HTMLInputElement>(null)
   const [elapsedTime, setElapsedTime] = useState(0)
   const [finalTime, setFinalTime] = useState<number | null>(null)
+  const elapsedTimeRef = useRef(0)
 
   // Stopwatch effect
   useEffect(() => {
@@ -57,7 +58,10 @@ export default function Home() {
       setElapsedTime(0)
       setFinalTime(null)
       interval = setInterval(() => {
-        setElapsedTime((prev) => prev + 1)
+        setElapsedTime((prev) => {
+          elapsedTimeRef.current = prev + 1
+          return prev + 1
+        })
       }, 1000)
     }
     return () => {
@@ -163,6 +167,7 @@ export default function Home() {
               if (a.ok) {
                 setApkUrl(a.url)
                 setApkName(a.name)
+                setFinalTime(elapsedTimeRef.current)
                 // Mark all steps as completed when APK is successfully received
                 setSteps((prevSteps) =>
                   prevSteps.map((step) => ({
